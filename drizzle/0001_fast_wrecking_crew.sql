@@ -1,0 +1,1 @@
+ALTER TABLE `students` ADD `help_topic` text;
