@@ -1,42 +1,62 @@
-# MathPath — Learn with Mr. Porras
+# MathPath · Learn with Mr. Porras
 
-## Open the published portal
+Guided math practice for grades 6–8, with 24 original introductory topics, worked examples, guided steps, fresh practice questions, hints, and saved progress.
 
-- Student portal: https://porras-math-path.prueba1xyz.chatgpt.site/
-- Teacher dashboard: https://porras-math-path.prueba1xyz.chatgpt.site/teacher
+## Direct Cloudflare deployment
 
-This repository contains the source of the published MathPath portal. GitHub itself is not the running student portal. Deployment to the owner's separate Cloudflare account is not yet configured. This version relies on Sites-managed teacher authentication and D1 bindings; it must be adapted before deploying directly to a standalone Cloudflare Worker.
+The standalone build is prepared. **Publication to the owner's Cloudflare account has not yet been verified.** The repository URL is not a running classroom.
 
-A guided, responsive math practice portal for grades 6–8. Includes 24 introductory topics, original worked examples, scaffolded guided steps, generated practice questions, hints, solutions, and a teacher dashboard.
+Deploy the main branch as a Worker named mathpath in account 411e855db2e236ed186881845c318001.
 
-## Learner flow
+- Build command: npm run build
+- Deploy command: npx wrangler deploy
+- Root directory: repository root
+- Configuration: wrangler.json
+- Student route: /
+- Private teacher route: /teacher
 
-Students enter only their first and last name, then choose a grade and topic. A normalized full name identifies a practice profile across devices. Exact duplicate full names share a profile; the teacher can agree on a distinct name variation when needed. These are practice profiles, not verified identities. Students should sign out on shared devices.
+The checked-in docs/ folder contains the compiled frontend, so npx wrangler deploy can also publish the prepared version directly. SQLite Durable Object storage is provisioned through the configuration; no separate D1 database setup is required.
 
-A topic is mastered after the student completes the learning and guided stages and answers 5 new questions correctly on the first try, without a hint or solution. Supported correct answers still count toward practice totals. This introductory set is not a full grade-level curriculum or a formal gradebook.
+Before classroom use, configure the TEACHER_CODE_SHA256 secret in the Worker settings. Its value is the SHA-256 digest of the private 16-character alphanumeric teacher code, uppercased with spaces and hyphens removed. Keep the actual code and its digest out of this repository. Without the secret, teacher access stays locked.
 
-## Teacher access
+After deployment succeeds, verify the returned workers.dev URL, /api/health, student registration, and /teacher. Replace this pending-publication note with the confirmed links.
 
-The public student portal is `/`. The protected teacher workspace is `/teacher`. The teacher uses Sites-managed ChatGPT sign-in. The server authorizes the verified owner email against the `TEACHER_EMAIL` runtime secret. No roster data is returned to anonymous visitors, students, or other signed-in accounts. Configure the owner email through the native Sites environment tool; never put the value in client code.
+## Students
 
-The dashboard refreshes every 12 seconds and shows names, current grade/topic/stage, recent activity, help requests, and per-topic progress. Activity indicates a visible browser heartbeat within the last two minutes; it does not verify attention. CSV export uses the current filters and escapes spreadsheet formula prefixes.
+Students enter only first and last names. Spaces, Unicode normalization, and letter case are normalized when matching profiles. Returning with the same name restores the same student ID and saved progress, including on another device. Signing out closes the device session while keeping progress.
 
-## Runtime and data
+Profiles, activity, lesson milestones, question attempts, and progress are stored online. Name-only profiles support optional practice, not verified identities. Two students with the same full name share a profile; agree on distinct name variations when needed. Students should sign out on shared devices.
 
-Vinext and React on Cloudflare Workers. D1 binding: `DB`. Migrations live in `drizzle/`. Profiles, opaque hashed student sessions, lesson milestones, and scored question attempts are stored online. Answers are recomputed and validated by the server. Teacher reads are checked on every request. Student writes require an opaque HttpOnly session cookie and same-origin requests. Lessons and public examples are not secret assessment material.
+## Teacher dashboard
 
-## Validation
+The private teacher code creates an eight-hour Secure, HttpOnly, SameSite=Strict session. Server-side session hashes support sign-out, expiry, and code rotation. Persistent rate limiting protects code entry. Every teacher action requires authorization. Caller-supplied identity headers never grant access to the standalone Worker.
 
-- `node node_modules/typescript/bin/tsc --noEmit`
-- `node scripts/verify-math.mjs`
-- Build and publish through the Sites workflow.
+The dashboard refreshes every 12 seconds and shows student names, grade, current topic and stage, recent activity, help requests, attempts, correct answers, and mastered topics. Includes search, grade/activity filters, individual topic details, CSV export, a student-link copy button, and Remove student with confirmation. Removal deletes the selected profile, sessions, and practice records; other students remain intact.
 
-The verification script checks 4,320 generated questions against independent calculations from the visible prompts. It applies the actual migrations to in-memory SQLite and tests the request handlers with a D1-compatible adapter, including progress restoration, teacher authorization, isolation between student sessions, hint/retry/solution behavior, duplicate credit, activity, help, and logout. It does not replace a real-browser interaction test.
+Activity means a visible-page heartbeat within two minutes, not verified attention. Mastery requires learning and guided stages plus five independent first-try correct answers. Supported correct answers still count in practice totals.
+
+## Different MathPath template
+
+A warm notebook classroom with horizontal navigation, a teal graph-paper banner, grade cards, mathematical illustrations, and a spacious teacher roster. MathPath is a separate project and design from the Python Practice Portal.
+
+## Verification
+
+Run:
+
+    npm run typecheck:cloudflare
+    npm run verify:cloudflare
+    npm run build
+    npx wrangler deploy --dry-run --outdir work/worker
+    node scripts/verify-worker.mjs
+
+Content checks independently calculate 4,320 generated questions. API checks cover returning students, saved progress, scoring, hints, retries, authorization, session expiry and revocation, cross-origin protection, rate limiting, help requests, and student removal. The actual Worker bundle is tested with Cloudflare's local SQLite Durable Object runtime. Test access codes are public fixtures and must never be used in production.
+
+The direct deployment uses practice/, cloudflare/, and vite.cloudflare.config.ts. The original Sites source remains available in app/, build/, and .openai/. Previously hosted student records are not embedded in public code or frontend assets.
 
 ## Content references
+
+Original lessons; independent of DeltaMath. This introductory collection is not a complete grade-level curriculum or a formal gradebook.
 
 - https://www.thecorestandards.org/Math/Content/6/introduction/
 - https://www.thecorestandards.org/Math/Content/7/introduction/
 - https://www.thecorestandards.org/Math/Content/8/introduction/
-
-Content and visual design are original. MathPath is independent of DeltaMath. No DeltaMath accounts or material are imported.

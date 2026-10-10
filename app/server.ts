@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { isCorrect, parseAnswer, topicById } from './curriculum';
 import { generateQuestion } from './question-engine';
+import { authenticateTeacher, loginTeacher, logoutTeacher } from './teacher-auth';
 const DAY=86400000;
 const cookieName='mathpath_student';
 function db(){if(!env.DB)throw new Error('Progress storage is not available. Please try again shortly.');return env.DB;}
@@ -9,8 +10,7 @@ function fail(message:string,status=400){return json({error:message},status);}
 function cookie(value:string,age=30*86400){return `${cookieName}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${age}`;}
 async function hash(value:string){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');}
 async function identity(req:Request){const raw=(req.headers.get('Cookie')||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(cookieName+'='))?.slice(cookieName.length+1);if(!raw)return null;return db().prepare('SELECT s.* FROM students s JOIN sessions se ON se.student_id=s.id WHERE se.token_hash=? AND se.expires_at>?').bind(await hash(raw),Date.now()).first<any>();}
-function teacher(req:Request){const email=req.headers.get('oai-authenticated-user-email'),id=req.headers.get('oai-authenticated-user-id');return !!(email&&id&&env.TEACHER_EMAIL&&email.toLowerCase()===env.TEACHER_EMAIL.toLowerCase());}
-function teacherError(req:Request){return fail(req.headers.get('oai-authenticated-user-id')?'This dashboard is available only to Mr. Porras.':'Sign in to open your teacher dashboard.',req.headers.get('oai-authenticated-user-id')?403:401);}
+function teacherError(req:Request){return fail('Enter your private teacher code to open this dashboard.',req.headers.get('oai-authenticated-user-id')?403:401);}
 async function progressFor(id:string){const results=await db().batch([
  db().prepare('SELECT topic_id, learned, guided, updated_at FROM progress WHERE student_id=?').bind(id),
  db().prepare('SELECT topic_id, SUM(attempts) attempts, SUM(correct) correct, SUM(independent) independent, SUM(hint_used) hints, MAX(updated_at) updated_at FROM questions WHERE student_id=? GROUP BY topic_id').bind(id)
@@ -20,7 +20,7 @@ function publicQuestion(row:any){const q=generateQuestion(row.topic_id,row.seed,
 export async function handleGet(req:Request,action:string):Promise<Response>{try{
  if(action==='session'){const s=await identity(req);return json(s?{student:studentView(s),progress:await progressFor(s.id)}:{student:null,progress:{}});}
  if(action==='teacher'){
-  if(!teacher(req))return teacherError(req);
+  if(!await authenticateTeacher(req))return teacherError(req);
   const [roster,totals,lessons]=await db().batch([
    db().prepare('SELECT id,first_name,last_name,grade,current_topic,current_stage,help_requested,help_topic,last_seen,joined_at FROM students ORDER BY last_seen DESC LIMIT 2000'),
    db().prepare('SELECT student_id,topic_id,SUM(attempts) attempts,SUM(correct) correct,SUM(independent) independent,SUM(hint_used) hints,MAX(updated_at) updated_at FROM questions GROUP BY student_id,topic_id'),
@@ -38,6 +38,10 @@ export async function handlePost(req:Request,action:string):Promise<Response>{tr
  if(!req.headers.get('content-type')?.includes('application/json'))return fail('Expected a JSON request.',415);
  const raw=await req.text();if(raw.length>4096)return fail('Request is too large.',413);
  let body:any;try{body=JSON.parse(raw);}catch{return fail('Invalid request.');}if(!body||typeof body!=='object'||Array.isArray(body))return fail('Invalid request.');
+ if(action==='teacher-login'||action==='teacher-logout'){
+  if(origin!==new URL(req.url).origin||req.headers.get('sec-fetch-site')==='cross-site')return fail('Please use the teacher dashboard to submit this request.',403);
+  return action==='teacher-login'?await loginTeacher(req,body):await logoutTeacher(req);
+ }
  if(action==='join'){
   const clean=(v:unknown)=>typeof v==='string'?v.trim().replace(/\s+/g,' ').normalize('NFKC'):'';
   const first=clean(body.firstName),last=clean(body.lastName),valid=(n:string)=>n.length>=1&&n.length<=50&&/^[\p{L}\p{M} .’'\-]+$/u.test(n)&&/\p{L}/u.test(n);
@@ -51,7 +55,7 @@ export async function handlePost(req:Request,action:string):Promise<Response>{tr
  }
  if(action==='logout'){const rawToken=(req.headers.get('Cookie')||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(cookieName+'='))?.slice(cookieName.length+1);if(rawToken)await db().prepare('DELETE FROM sessions WHERE token_hash=?').bind(await hash(rawToken)).run();return json({ok:true},200,{'Set-Cookie':cookie('',0)});}
  if(action==='resolve-help'){
-  if(!teacher(req))return teacherError(req);if(typeof body.studentId!=='string')return fail('Choose a student.');
+  if(!await authenticateTeacher(req))return teacherError(req);if(typeof body.studentId!=='string')return fail('Choose a student.');
   await db().prepare('UPDATE students SET help_requested=0,help_topic=NULL WHERE id=?').bind(body.studentId).run();return json({ok:true});
  }
  const s=await identity(req);if(!s)return fail('Please enter your name to continue.',401);

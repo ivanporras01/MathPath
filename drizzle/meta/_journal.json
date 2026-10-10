@@ -15,6 +15,13 @@
       "when": 1791568373974,
       "tag": "0001_fast_wrecking_crew",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791573041067,
+      "tag": "0002_sweet_skullbuster",
+      "breakpoints": true
     }
   ]
 }

@@ -3,7 +3,7 @@ import {readFile,writeFile,mkdir,readdir} from 'node:fs/promises';
 import {DatabaseSync} from 'node:sqlite';
 import ts from 'typescript';
 const out=new URL('../work/verification/',import.meta.url);await mkdir(out,{recursive:true});
-for(const name of ['curriculum','question-engine','server']){let source=await readFile(new URL(`../app/${name}.ts`,import.meta.url),'utf8');source=source.replace("'cloudflare:workers'","'./test-env.mjs'").replace("'./curriculum'","'./curriculum.mjs'").replace("'./question-engine'","'./question-engine.mjs'");await writeFile(new URL(`${name}.mjs`,out),ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText);}
+for(const name of ['curriculum','question-engine','teacher-auth','server']){let source=await readFile(new URL(`../app/${name}.ts`,import.meta.url),'utf8');source=source.replace("'cloudflare:workers'","'./test-env.mjs'").replace("'./curriculum'","'./curriculum.mjs'").replace("'./question-engine'","'./question-engine.mjs'").replace("'./teacher-auth'","'./teacher-auth.mjs'");await writeFile(new URL(`${name}.mjs`,out),ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText);}
 await writeFile(new URL('test-env.mjs',out),"export const env={DB:null,TEACHER_EMAIL:'teacher@example.test'};");
 const {TOPICS,isCorrect,parseAnswer}=await import(new URL('curriculum.mjs',out));
 const {generateQuestion}=await import(new URL('question-engine.mjs',out));
@@ -65,4 +65,59 @@ const dashboard=await call('teacher',undefined,'',teacher);assert.equal(dashboar
 await call('resolve-help',{studentId},'',teacher);assert.equal((await call('session',undefined,ck)).data.student.helpRequested,false);
 await call('logout',{},ck);assert.equal((await call('session',undefined,ck)).data.student,null);assert.ok((await call('session',undefined,restored.cookie)).data.student);
 console.log('PASS: D1 migrations, name-only entry, cross-device resume, protected teacher roster, ownership, CSRF checks, answer scoring, retry/hint/solution rules, no duplicate credit, activity, help, and logout.');
+
+// This is a public test fixture, never the live teacher code.
+const fixtureCode='TEST-ONLY-CODE-1234';
+async function digest(value){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),b=>b.toString(16).padStart(2,'0')).join('');}
+const fixtureHash=await digest(fixtureCode.replaceAll('-',''));
+const teacherClient={'cf-connecting-ip':'192.0.2.20'};
+assert.equal((await call('teacher-login',{code:fixtureCode},'',teacherClient)).status,503,'missing configuration fails closed');
+env.TEACHER_CODE_SHA256=fixtureHash;
+assert.equal((await call('teacher-login',{code:'not-the-code'},'',teacherClient)).status,401);
+assert.equal((await call('teacher-login',{code:fixtureCode},'',{...teacherClient,Origin:'https://evil.test'})).status,403);
+assert.equal((await call('teacher-login',{code:fixtureCode},'',{...teacherClient,'sec-fetch-site':'cross-site'})).status,403);
+const noOrigin=new Request('https://math.test/api/teacher-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:fixtureCode})});
+assert.equal((await handlePost(noOrigin,'teacher-login')).status,403);
+let codeLogin=await call('teacher-login',{code:' test-only-code-1234 '},'',teacherClient);
+assert.equal(codeLogin.status,200);assert.match(codeLogin.cookie,/^__Host-mathpath_teacher=[a-f0-9]{64}$/);
+assert.equal((await call('teacher',undefined,codeLogin.cookie)).status,200);
+assert.equal((await call('teacher',undefined,restored.cookie)).status,401,'student cookie cannot access roster');
+assert.equal((await call('teacher',undefined,'__Host-mathpath_teacher='+fixtureCode)).status,401,'code is not a session token');
+const codeRoster=await call('teacher',undefined,codeLogin.cookie);assert.ok(codeRoster.data.students.find(s=>s.id===studentId));
+await call('help',{requested:true,topicId:'8-functions'},restored.cookie);
+assert.equal((await call('resolve-help',{studentId},codeLogin.cookie)).status,200);
+assert.equal((await call('session',undefined,restored.cookie)).data.student.helpRequested,false);
+const oldSession=codeLogin.cookie;
+codeLogin=await call('teacher-login',{code:fixtureCode},oldSession,teacherClient);
+assert.notEqual(codeLogin.cookie,oldSession);
+assert.equal((await call('teacher',undefined,oldSession)).status,401,'re-login revokes the old browser session');
+const rawToken=codeLogin.cookie.split('=')[1],storedHash=await digest(rawToken);
+assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM teacher_sessions WHERE token_hash=?').get(rawToken).n,0,'session stored only as a hash');
+assert.ok(sqlite.prepare('SELECT * FROM teacher_sessions WHERE token_hash=?').get(storedHash));
+env.TEACHER_CODE_SHA256='0'.repeat(64);
+assert.equal((await call('teacher',undefined,codeLogin.cookie)).status,401,'code rotation invalidates existing sessions');
+env.TEACHER_CODE_SHA256=fixtureHash;
+sqlite.prepare('UPDATE teacher_sessions SET expires_at=? WHERE token_hash=?').run(Date.now()-1,storedHash);
+assert.equal((await call('teacher',undefined,codeLogin.cookie)).status,401,'expired sessions cannot read roster');
+codeLogin=await call('teacher-login',{code:fixtureCode},'',teacherClient);
+const independentLogin=await call('teacher-login',{code:fixtureCode},'',{'cf-connecting-ip':'192.0.2.21'});
+const signedOut=await call('teacher-logout',{},codeLogin.cookie,teacherClient);
+assert.equal(signedOut.status,200);assert.equal(signedOut.data.signOutAccount,false);
+assert.equal((await call('teacher',undefined,codeLogin.cookie)).status,401,'logout revokes teacher session');
+assert.equal((await call('teacher',undefined,independentLogin.cookie)).status,200,'other teacher devices remain signed in');
+const badClient={'cf-connecting-ip':'192.0.2.99'},realNow=Date.now;
+const fixedTime=Math.floor(realNow()/900000)*900000+1000;Date.now=()=>fixedTime;
+try{
+ for(let i=0;i<10;i++)assert.equal((await call('teacher-login',{code:'wrong'},'',badClient)).status,401);
+ assert.equal((await call('teacher-login',{code:fixtureCode},'',badClient)).status,429,'limit enforced even for a correct code');
+ assert.equal((await call('teacher-login',{code:fixtureCode},'',{'cf-connecting-ip':'192.0.2.100'})).status,200,'one client does not lock out others');
+ Date.now=()=>fixedTime+900000;
+ assert.equal((await call('teacher-login',{code:fixtureCode},'',badClient)).status,200,'rate limit expires');
+}finally{Date.now=realNow;}
+const cookieResponse=await handlePost(new Request('https://math.test/api/teacher-login',{method:'POST',headers:{'Content-Type':'application/json',Origin:'https://math.test','cf-connecting-ip':'192.0.2.101'},body:JSON.stringify({code:fixtureCode})}),'teacher-login');
+assert.equal(cookieResponse.status,200);
+for(const flag of ['Secure','HttpOnly','SameSite=Strict','Path=/','Max-Age=28800'])assert.ok(cookieResponse.headers.get('Set-Cookie').includes(flag));
+assert.equal(cookieResponse.headers.get('Cache-Control'),'no-store');
+assert.equal((await call('teacher-logout',{},'',teacher)).data.signOutAccount,true,'owner recovery can sign out fully');
+console.log('PASS: private teacher code, secure cookies, session rotation/revocation/expiry, code changes, student isolation, CSRF rejection, teacher actions, and persistent rate limiting.');
 sqlite.close();

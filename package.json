@@ -1,5 +1,5 @@
 {
-  "name": "site-creator-vinext-starter",
+  "name": "mathpath",
   "version": "0.1.0",
   "private": true,
   "engines": {
@@ -8,10 +8,15 @@
   "scripts": {
     "install:ci": "bash scripts/install-pnpm.sh",
     "dev": "node scripts/run-framework.mjs dev",
-    "build": "node scripts/run-framework.mjs build",
+    "build": "vite build --config vite.cloudflare.config.ts",
     "start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "build:sites": "node scripts/run-framework.mjs build",
+    "dev:cloudflare": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "verify:cloudflare": "node scripts/verify-cloudflare.mjs",
+    "typecheck:cloudflare": "tsc -p tsconfig.cloudflare.json --noEmit"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
