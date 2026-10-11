@@ -28,5 +28,8 @@
       ]
     }
   ],
-  "account_id": "411e855db2e236ed186881845c318001"
+  "account_id": "411e855db2e236ed186881845c318001",
+  "vars": {
+    "TEACHER_CODE_SHA256": "3ef5a92a54b38d6df7290d29d3851b9d4ec0fa869ce00249c55986955d8f28fa"
+  }
 }
