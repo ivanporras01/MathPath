@@ -10,7 +10,7 @@ const mf = new Miniflare({
   compatibilityDate:'2026-05-15',
   durableObjects:{CLASSROOM:{className:'MathClassroom',useSQLite:true}},
   bindings:{TEACHER_CODE_SHA256:createHash('sha256').update(fixtureCode.replaceAll('-','')).digest('hex')},
-  serviceBindings:{ASSETS:()=>new Response('MathPath')},
+  serviceBindings:{ASSETS:()=>new Response('MathHub')},
 });
 async function call(action,body,cookie='',extra={}) {
   const response=await mf.dispatchFetch('https://math.test/api/'+action,{

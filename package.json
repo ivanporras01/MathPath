@@ -1,5 +1,5 @@
 {
-  "name": "mathpath",
+  "name": "mathhub-by-mr-porras",
   "version": "0.1.0",
   "private": true,
   "engines": {
@@ -8,15 +8,16 @@
   "scripts": {
     "install:ci": "bash scripts/install-pnpm.sh",
     "dev": "node scripts/run-framework.mjs dev",
-    "build": "vite build --config vite.cloudflare.config.ts",
+    "build": "node scripts/run-framework.mjs build",
     "start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "build:sites": "node scripts/run-framework.mjs build",
     "dev:cloudflare": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler deploy --config wrangler.cloudflare.json",
     "verify:cloudflare": "node scripts/verify-cloudflare.mjs",
-    "typecheck:cloudflare": "tsc -p tsconfig.cloudflare.json --noEmit"
+    "typecheck:cloudflare": "tsc -p tsconfig.cloudflare.json --noEmit",
+    "build:cloudflare": "vite build --config vite.cloudflare.config.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

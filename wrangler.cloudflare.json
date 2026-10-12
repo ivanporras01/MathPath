@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "mathpath",
+  "name": "mathhub",
   "main": "cloudflare/worker.ts",
   "compatibility_date": "2026-05-15",
   "workers_dev": true,
@@ -22,14 +22,11 @@
   },
   "migrations": [
     {
-      "tag": "mathpath-v1",
+      "tag": "mathhub-v1",
       "new_sqlite_classes": [
         "MathClassroom"
       ]
     }
   ],
-  "account_id": "411e855db2e236ed186881845c318001",
-  "vars": {
-    "TEACHER_CODE_SHA256": "d79cc8f26cec5ade58f6123eed0faca3c12e7db9e4aee4d1eb8c8b52a2efe17f"
-  }
+  "account_id": "411e855db2e236ed186881845c318001"
 }

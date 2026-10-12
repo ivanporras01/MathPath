@@ -1,8 +1,13 @@
-export type Grade = 6 | 7 | 8;
+export type Grade = 6 | 7 | 8 | 9 | 10 | 11;
+import { EXTRA_TOPICS } from "./extra-topics";
+export const COURSE_IDS:Grade[]=[6,7,8,9,10,11];
+export const COURSE_NAMES:Record<Grade,string>={6:"6th Grade Math",7:"7th Grade Math",8:"Pre-Algebra",9:"Algebra 1",10:"Algebra 2",11:"Geometry"};
+export function courseName(g:number){return COURSE_NAMES[g as Grade]||"Math";}
+export const COURSE_BADGES:Record<Grade,string>={6:"6",7:"7",8:"PA",9:"A1",10:"A2",11:"G"};
 export type Step = { title:string; text:string; math:string; ask:string; answer:number };
 export type Question = { prompt:string; expression?:string; answer:number; unit?:string; hint:string; steps:Step[]; note?:string };
 export type Topic = { id:string; grade:Grade; title:string; category:string; color:string; minutes:number; description:string; idea:string; rules:string[]; mistake:string; visual:string; standard:string };
-function T(id:string, title:string,category:string,color:string,minutes:number,description:string,idea:string,rules:string[],mistake:string,visual:string,standard:string):Topic { return {id,grade:Number(id[0]) as Grade,title,category,color,minutes,description,idea,rules,mistake,visual,standard}; }
+function T(id:string, title:string,category:string,color:string,minutes:number,description:string,idea:string,rules:string[],mistake:string,visual:string,standard:string):Topic { return {id,grade:Number(id.split('-')[0]) as Grade,title,category,color,minutes,description,idea,rules,mistake,visual,standard}; }
 export const TOPICS:Topic[] = [
 T('6-order','Order of operations','Number sense','mint',8,'Give every operation its turn.','An expression is a set of directions. Following the same order helps everyone reach the same answer.', ['Work inside parentheses first, then evaluate exponents.','Multiply and divide from left to right.','Add and subtract from left to right.'],'Multiplication and division share a level: move left to right. Addition and subtraction also share a level.','order','6.EE.A.1'),
 T('6-fractions','Fractions & decimals','Number sense','blue',10,'Make sense of parts of a whole.','A fraction and a decimal can name the same amount. For example, 1/2 and 0.5 both mean half of one whole.', ['To add fractions, first use a common denominator.','To divide by a fraction, multiply by its reciprocal.','To multiply decimals, count the decimal places in both factors.'],'Do not add denominators when adding fractions. For division, flip only the second fraction.','fraction','6.NS.A.1 · 6.NS.B.3'),
@@ -28,11 +33,16 @@ T('8-functions','Understanding functions','Linear relationships','lavender',9,'F
 T('8-systems','Systems of equations','Algebra','mint',11,'Find a pair that makes both equations true.','A solution to a system is a point (x, y) that satisfies BOTH equations. On a graph, it is where the two lines meet.', ['If both equations equal y, set their expressions equal to each other.','Solve the resulting equation for x.','Substitute x into either equation to find y, then check both.'],'Finding x alone does not give the complete ordered-pair solution. Find y too, even when a question asks for just one coordinate.','system','8.EE.C.8'),
 T('8-pythagorean','The Pythagorean theorem','Geometry','blue',10,'Discover a special rule for right triangles.','For a right triangle, a² + b² = c². The hypotenuse c is the longest side, opposite the right angle.', ['Identify the right angle and label the hypotenuse c.','Square the known side lengths and use a² + b² = c².','Take the square root to turn a squared length into a length.'],'This theorem works for right triangles. For a missing leg, subtract the known leg’s square from the hypotenuse’s square.','triangle','8.G.B.6–8'),
 T('8-transformations','Transformations on a grid','Geometry','peach',10,'Slide, flip, turn, and resize shapes.','A transformation changes a figure’s position, orientation, or size. Translations, reflections, and rotations keep size and shape.', ['Translate: add the horizontal shift to x and the vertical shift to y.','Reflect across x-axis: (x, y) → (x, −y); across y-axis: (x, y) → (−x, y).','Dilate from origin by k: (x, y) → (kx, ky). Rotate 90° counterclockwise: (x, y) → (−y, x).'],'Across the x-axis, change the sign of y, not x. The axis stays fixed while the point moves to the opposite side.','transform','8.G.A.1–4'),
+...EXTRA_TOPICS,
 ];
 export const gradeCopy:Record<Grade,{label:string;heading:string;description:string}>={
 6:{label:'Build your foundation',heading:'Big ideas start with the basics.',description:'Explore numbers, ratios, early algebra, and the shapes around you.'},
 7:{label:'Make the connections',heading:'Put your math skills together.',description:'Grow with rational numbers, proportions, equations, and probability.'},
 8:{label:'Get ready for algebra',heading:'See the patterns. Find your path.',description:'Connect equations, functions, graphs, and geometry with confidence.'}
+,
+9:{label:'Think in relationships',heading:'Your first steps in algebra.',description:'Explore equations, linear relationships, polynomials, and quadratic patterns.'},
+10:{label:'Go beyond the line',heading:'Discover a wider world of functions.',description:'Build on algebra with quadratics, polynomials, radicals, exponential functions, and logarithms.'},
+11:{label:'Reason. Visualize. Prove.',heading:'Find the logic in every shape.',description:'Connect angles, triangles, transformations, measurements, and right-triangle trigonometry.'}
 };
 export function topicById(id:string){return TOPICS.find(t=>t.id===id);}
 export function parseAnswer(raw:string):number|null {

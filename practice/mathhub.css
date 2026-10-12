@@ -1,4 +1,4 @@
-/* MathPath's notebook classroom: a top navigation and spacious topic gallery. */
+/* MathHub's notebook classroom: a top navigation and spacious topic gallery. */
 :root{--ink:#163e43;--text:#28474b;--muted:#647676;--line:#dce5e1;--paper:#f7f5ee;--green:#17685f;--lime:#ffe096;--mint:#dfefe7;--peach:#ffe6d6;--lavender:#ede6fa}
 body{background:var(--paper);font-family:'Aptos','Segoe UI',sans-serif;font-size:15px}
 .app-shell{display:block;min-height:100vh}

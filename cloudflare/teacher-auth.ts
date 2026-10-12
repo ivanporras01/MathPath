@@ -1,7 +1,7 @@
 import type { RuntimeEnv } from './types';
 export function createTeacherAuth(env: RuntimeEnv) {
 
-const COOKIE = '__Host-mathpath_teacher';
+const COOKIE = '__Host-mathhub_teacher';
 const SESSION_SECONDS = 8 * 60 * 60;
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_ATTEMPTS = 10;
@@ -49,12 +49,13 @@ async function authenticateTeacher(req: Request): Promise<boolean> {
   return false;
 }
 
-async function loginTeacher(req: Request, body: { code?: unknown }) {
+async function loginTeacher(req: Request, body: { code?: unknown; remember?: unknown }) {
   const expected = env.TEACHER_CODE_SHA256;
   if (!expected || !/^[a-f0-9]{64}$/.test(expected)) {
-    return json({ error: 'Teacher code access is not configured yet. Please try again shortly.' }, 503);
+    return json({ error: 'Professor access needs setup. Please contact Mr. Porras.' }, 503);
   }
   const now = Date.now();
+  const duration = body.remember === true ? 30 * 24 * 60 * 60 : SESSION_SECONDS;
   const windowStart = Math.floor(now / WINDOW_MS) * WINDOW_MS;
   // Cloudflare supplies this header; store only its hash, never the address.
   const bucket = await sha256('teacher-login|' + (req.headers.get('cf-connecting-ip') || 'unknown'));
@@ -70,21 +71,21 @@ async function loginTeacher(req: Request, body: { code?: unknown }) {
   const code = typeof body.code === 'string' && body.code.length <= 64
     ? body.code.toUpperCase().replace(/[\s-]/g, '') : '';
   const received = await sha256(code);
-  if (!/^[A-Z0-9]{16}$/.test(code) || !equalHashes(received, expected)) {
-    return json({ error: 'That code is not correct. Please check it and try again.' }, 401);
+  if (!/^[A-Z0-9]{12,64}$/.test(code) || !equalHashes(received, expected)) {
+    return json({ error: 'That access phrase is not correct. Check the words and numbers, then try again.' }, 401);
   }
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   const token = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
   const oldToken = tokenFrom(req);
   const statements = [
     db().prepare('INSERT INTO teacher_sessions (token_hash,code_hash,expires_at) VALUES (?,?,?)')
-      .bind(await sha256(token), expected, now + SESSION_SECONDS * 1000),
+      .bind(await sha256(token), expected, now + duration * 1000),
     db().prepare('DELETE FROM teacher_sessions WHERE expires_at<=? OR code_hash<>?').bind(now, expected),
     db().prepare('DELETE FROM teacher_login_attempts WHERE bucket_key=? OR window_start<?').bind(bucket, windowStart),
   ];
   if (oldToken) statements.push(db().prepare('DELETE FROM teacher_sessions WHERE token_hash=?').bind(await sha256(oldToken)));
   await db().batch(statements);
-  return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie(token) });
+  return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie(token, duration) });
 }
 
 async function logoutTeacher(req: Request) {

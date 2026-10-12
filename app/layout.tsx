@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "../practice/mathhub.css";
+import "./mathhub.css";
 
 export const metadata: Metadata = {
-  title: "MathPath · Learn with Mr. Porras",
-  description: "One clear step at a time. Guided math lessons, friendly practice, and progress for grades 6–8.",
+  title: "MathHub · by Mr. Porras",
+  description: "Guided math learning in six courses, from 6th Grade Math through Algebra 2 and Geometry.",
   robots: { index: false, follow: false },
   icons: {
     icon: "/favicon.svg",

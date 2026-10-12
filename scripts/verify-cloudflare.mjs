@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import {extraOracle} from './mathhub-oracles.mjs';
 import {readFile,writeFile,mkdir,readdir} from 'node:fs/promises';
 import {DatabaseSync} from 'node:sqlite';
 import ts from 'typescript';
-const out=new URL('../work/cloudflare-verification/',import.meta.url);await mkdir(out,{recursive:true});
-for(const name of ['curriculum','question-engine','teacher-auth','server']){let source=await readFile(new URL(`../${['server','teacher-auth'].includes(name)?'cloudflare':'app'}/${name}.ts`,import.meta.url),'utf8');source=source.replace("'cloudflare:workers'","'./test-env.mjs'").replace("'../app/curriculum'","'./curriculum.mjs'").replace("'./curriculum'","'./curriculum.mjs'").replace("'../app/question-engine'","'./question-engine.mjs'").replace("'./question-engine'","'./question-engine.mjs'").replace("'./teacher-auth'","'./teacher-auth.mjs'");await writeFile(new URL(`${name}.mjs`,out),ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText);}
+const native=process.argv.includes('--sites');
+const out=new URL(native?'../work/sites-verification/':'../work/cloudflare-verification/',import.meta.url);await mkdir(out,{recursive:true});
+for(const name of ['curriculum','question-engine','extra-topics','high-school-topics','extra-questions','high-school-questions','question-utils','teacher-auth','server']){let source=await readFile(new URL(`../${!native&&['server','teacher-auth'].includes(name)?'cloudflare':'app'}/${name}.ts`,import.meta.url),'utf8');source=source.replace("'cloudflare:workers'","'./test-env.mjs'").replace(/(['"])(?:\.\.\/app\/|\.\/)([a-z-]+)\1/g,(_,quote,name)=>`${quote}./${name}.mjs${quote}`);await writeFile(new URL(`${name}.mjs`,out),ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText);}
 await writeFile(new URL('test-env.mjs',out),"export const env={DB:null,TEACHER_EMAIL:'teacher@example.test'};");
 const {TOPICS,isCorrect,parseAnswer}=await import(new URL('curriculum.mjs',out));
 const {generateQuestion}=await import(new URL('question-engine.mjs',out));
@@ -30,17 +32,17 @@ function oracle(id,q){const e=nums(q.expression),p=nums(q.prompt);switch(id){
  case'8-systems':{const x=(e[2]-e[1])/(e[0]-1);return q.prompt.includes('y-coordinate')?e[0]*x+e[1]:x;}
  case'8-pythagorean':return q.prompt.includes('one leg')?Math.sqrt(p[0]**2-p[1]**2):Math.sqrt(p[0]**2+p[1]**2);
  case'8-transformations':return q.prompt.includes('moves')?p[0]+p[2]:q.prompt.includes('Reflect')?-p[1]:p[0]*p[2];
- default:throw Error(id);
+ default:return extraOracle(id,q);
 }}
-assert.equal(TOPICS.length,24);for(const g of [6,7,8])assert.equal(TOPICS.filter(t=>t.grade===g).length,8);
+assert.equal(TOPICS.length,72);for(const g of [6,7,8,9,10,11])assert.equal(TOPICS.filter(t=>t.grade===g).length,12);
 let checked=0;for(const t of TOPICS){assert.equal(t.rules.length,3);for(let i=1;i<=180;i++){const q=generateQuestion(t.id,(i*2654435761)>>>0,1+i%3),expected=oracle(t.id,q);assert.ok(Math.abs(q.answer-expected)<1e-7,`${t.id}: ${q.prompt} ${q.expression}; expected ${expected}, got ${q.answer}`);assert.ok(Number.isFinite(q.answer));assert.ok(q.steps.length>=2&&q.steps.every(s=>s.ask&&s.math&&Number.isFinite(s.answer)));assert.ok(isCorrect(String(expected),q.answer));assert.ok(isCorrect(expected.toFixed(6),q.answer));assert.equal(isCorrect(String(q.answer+1),q.answer),false);checked++;}}
 for(const [raw,expected] of [['3/4',.75],['-1 1/2',-1.5],['−0.5',-.5],['1,000',1000],['.25',.25]])assert.equal(parseAnswer(raw),expected);
 for(const raw of ['','1/0','abc','Infinity','3+4','1e999'])assert.equal(parseAnswer(raw),null);
-console.log(`PASS: ${checked} independently checked math questions across all 24 topics; fraction/decimal validation.`);
+console.log(`PASS: ${checked} independently checked math questions across all 72 topics; fraction/decimal validation.`);
 const sqlite=new DatabaseSync(':memory:');sqlite.exec('PRAGMA foreign_keys=ON');for(const name of (await readdir(new URL('../drizzle/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort())sqlite.exec(await readFile(new URL(`../drizzle/${name}`,import.meta.url),'utf8'));
 class Statement{constructor(sql,params=[]){this.sql=sql;this.params=params;}bind(...p){return new Statement(this.sql,p);}async first(){return sqlite.prepare(this.sql).get(...this.params)||null;}async all(){return{results:sqlite.prepare(this.sql).all(...this.params),success:true};}async run(){const r=sqlite.prepare(this.sql).run(...this.params);return{success:true,meta:{changes:r.changes}};}}
 const {env}=await import(new URL('test-env.mjs',out));env.DB={prepare:sql=>new Statement(sql),batch:async stmts=>Promise.all(stmts.map(s=>s.all()))};
-const {createHandlers}=await import(new URL('server.mjs',out)); const {handleGet,handlePost}=createHandlers(env);
+const server=await import(new URL('server.mjs',out)); const {handleGet,handlePost}=native?server:server.createHandlers(env);
 async function call(action,body,ck='',headers={}){const req=new Request(`https://math.test/api/${action}`,{method:body===undefined?'GET':'POST',headers:{...(body===undefined?{}:{'Content-Type':'application/json','Origin':'https://math.test'}),...(ck?{Cookie:ck}:{}),...headers},body:body===undefined?undefined:JSON.stringify(body)});const res=await(body===undefined?handleGet(req,action):handlePost(req,action));return{status:res.status,data:await res.json(),cookie:res.headers.get('Set-Cookie')?.split(';')[0]};}
 const fixtureCode='TEST-ONLY-CODE-1234';
 async function digest(value){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),b=>b.toString(16).padStart(2,'0')).join('');}
@@ -50,9 +52,9 @@ const ownerSession=await call('teacher-login',{code:fixtureCode});
 assert.equal(ownerSession.status,200);
 const teacher={Cookie:ownerSession.cookie};
 const spoof={'oai-authenticated-user-id':'owner','oai-authenticated-user-email':'teacher@example.test'};
-assert.equal((await call('teacher',undefined,'',spoof)).status,401,'public identity headers grant no access');
+assert.equal((await call('teacher',undefined,'',spoof)).status,native?200:401,'Sites trusts platform identity; standalone rejects identity headers');
 
-assert.equal((await call('teacher')).status,401);assert.equal((await call('teacher',undefined,'',{'oai-authenticated-user-id':'other','oai-authenticated-user-email':'other@example.test'})).status,401);
+assert.equal((await call('teacher')).status,401);assert.equal((await call('teacher',undefined,'',{'oai-authenticated-user-id':'other','oai-authenticated-user-email':'other@example.test'})).status,native?403:401);
 assert.equal((await call('join',{firstName:'<script>',lastName:'x'})).status,400);
 assert.equal((await call('join',{firstName:'Test',lastName:'Learner'},'',{Origin:'https://evil.test'})).status,403);
 let joined=await call('join',{firstName:'Zoë',lastName:"O'Neil",grade:6});assert.equal(joined.status,200);assert.ok(joined.cookie);const studentId=joined.data.student.id,ck=joined.cookie;
@@ -67,10 +69,10 @@ nq=await next();answer=await call('answer',{questionId:nq.id,answer:String(nq.q.
 nq=await next();await call('hint',{questionId:nq.id},ck);answer=await call('answer',{questionId:nq.id,answer:String(nq.q.answer)},ck);assert.equal(answer.data.independent,false);
 nq=await next();await call('solution',{questionId:nq.id},ck);assert.equal((await call('answer',{questionId:nq.id,answer:String(nq.q.answer)},ck)).status,400);
 const other=await call('join',{firstName:'Other',lastName:'Learner',grade:7});assert.equal((await call('answer',{questionId:nq.id,answer:'5'},other.cookie)).status,404);assert.equal((await call('resolve-help',{studentId},ck)).status,401);
-for(const t of TOPICS){const item=await next(t.id);const result=await call('answer',{questionId:item.id,answer:String(item.q.answer)},ck);assert.equal(result.data.correct,true,`API scoring ${t.id}`);}
-let restored=await call('join',{firstName:' ZOË ',lastName:"o'neil",grade:8});assert.equal(restored.data.student.id,studentId);assert.equal(Object.keys(restored.data.progress).length,24);assert.ok(restored.data.progress['6-order'].learned&&restored.data.progress['6-order'].guided);
+for(const t of TOPICS){sqlite.prepare('UPDATE questions SET created_at=created_at-61000 WHERE student_id=?').run(studentId);const item=await next(t.id);const result=await call('answer',{questionId:item.id,answer:String(item.q.answer)},ck);assert.equal(result.data.correct,true,`API scoring ${t.id}`);}
+let restored=await call('join',{firstName:' ZOË ',lastName:"o'neil",grade:8});assert.equal(restored.data.student.id,studentId);assert.equal(Object.keys(restored.data.progress).length,72);assert.ok(restored.data.progress['6-order'].learned&&restored.data.progress['6-order'].guided);
 await call('activity',{topicId:'7-equations',stage:'guided',grade:7},ck);await call('help',{requested:true,topicId:'7-equations'},ck);await call('activity',{topicId:'8-functions',stage:'learn',grade:8},ck);
-const dashboard=await call('teacher',undefined,'',teacher);assert.equal(dashboard.status,200);const learner=dashboard.data.students.find(s=>s.id===studentId);assert.equal(learner.helpTopic,'7-equations');assert.equal(learner.currentTopic,'8-functions');assert.equal(learner.helpRequested,true);assert.equal(Object.keys(learner.progress).length,24);
+const dashboard=await call('teacher',undefined,'',teacher);assert.equal(dashboard.status,200);const learner=dashboard.data.students.find(s=>s.id===studentId);assert.equal(learner.helpTopic,'7-equations');assert.equal(learner.currentTopic,'8-functions');assert.equal(learner.helpRequested,true);assert.equal(Object.keys(learner.progress).length,72);
 await call('resolve-help',{studentId},'',teacher);assert.equal((await call('session',undefined,ck)).data.student.helpRequested,false);
 await call('logout',{},ck);assert.equal((await call('session',undefined,ck)).data.student,null);assert.ok((await call('session',undefined,restored.cookie)).data.student);
 console.log('PASS: D1 migrations, name-only entry, cross-device resume, protected teacher roster, ownership, CSRF checks, answer scoring, retry/hint/solution rules, no duplicate credit, activity, help, and logout.');
@@ -85,10 +87,10 @@ assert.equal((await call('teacher-login',{code:fixtureCode},'',{...teacherClient
 const noOrigin=new Request('https://math.test/api/teacher-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:fixtureCode})});
 assert.equal((await handlePost(noOrigin,'teacher-login')).status,403);
 let codeLogin=await call('teacher-login',{code:' test-only-code-1234 '},'',teacherClient);
-assert.equal(codeLogin.status,200);assert.match(codeLogin.cookie,/^__Host-mathpath_teacher=[a-f0-9]{64}$/);
+assert.equal(codeLogin.status,200);assert.match(codeLogin.cookie,/^__Host-mathhub_teacher=[a-f0-9]{64}$/);
 assert.equal((await call('teacher',undefined,codeLogin.cookie)).status,200);
 assert.equal((await call('teacher',undefined,restored.cookie)).status,401,'student cookie cannot access roster');
-assert.equal((await call('teacher',undefined,'__Host-mathpath_teacher='+fixtureCode)).status,401,'code is not a session token');
+assert.equal((await call('teacher',undefined,'__Host-mathhub_teacher='+fixtureCode)).status,401,'code is not a session token');
 const codeRoster=await call('teacher',undefined,codeLogin.cookie);assert.ok(codeRoster.data.students.find(s=>s.id===studentId));
 await call('help',{requested:true,topicId:'8-functions'},restored.cookie);
 assert.equal((await call('resolve-help',{studentId},codeLogin.cookie)).status,200);
@@ -124,7 +126,7 @@ const cookieResponse=await handlePost(new Request('https://math.test/api/teacher
 assert.equal(cookieResponse.status,200);
 for(const flag of ['Secure','HttpOnly','SameSite=Strict','Path=/','Max-Age=28800'])assert.ok(cookieResponse.headers.get('Set-Cookie').includes(flag));
 assert.equal(cookieResponse.headers.get('Cache-Control'),'no-store');
-assert.equal((await call('teacher-logout',{},'',spoof)).data.signOutAccount,false);
+assert.equal((await call('teacher-logout',{},'',spoof)).data.signOutAccount,native);
 assert.equal((await call('remove-student',{studentId},restored.cookie)).status,401,'students cannot remove profiles');
 assert.equal((await call('remove-student',{studentId},independentLogin.cookie,{Origin:'https://evil.test'})).status,403);
 assert.equal((await call('remove-student',{studentId},independentLogin.cookie)).status,200);
@@ -133,5 +135,8 @@ assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM questions WHERE student_id=?
 assert.equal((await call('session',undefined,restored.cookie)).data.student,null);
 assert.ok((await call('session',undefined,other.cookie)).data.student,'other students remain intact');
 
+const remembered=await handlePost(new Request('https://math.test/api/teacher-login',{method:'POST',headers:{'Content-Type':'application/json',Origin:'https://math.test','cf-connecting-ip':'192.0.2.103'},body:JSON.stringify({code:fixtureCode,remember:true})}),'teacher-login');
+assert.equal(remembered.status,200);assert.ok(remembered.headers.get('Set-Cookie').includes('Max-Age=2592000'));
+assert.equal((await call('auth-options')).data.accountLogin,native);
 console.log('PASS: private teacher code, secure cookies, session rotation/revocation/expiry, code changes, student isolation, CSRF rejection, teacher actions, and persistent rate limiting.');
 sqlite.close();

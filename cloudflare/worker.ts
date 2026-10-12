@@ -49,7 +49,7 @@ export class MathClassroom extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     const run = this.queue.then(async () => {
       const action = new URL(request.url).pathname.slice('/api/'.length);
-      if (action === 'health') return Response.json({ ok: true, name: 'MathPath', teacherConfigured: !!this.env.TEACHER_CODE_SHA256 }, { headers: { 'Cache-Control': 'no-store' } });
+      if (action === 'health') return Response.json({ ok: true, name: 'MathHub', teacherConfigured: !!this.env.TEACHER_CODE_SHA256 }, { headers: { 'Cache-Control': 'no-store' } });
       if (request.method === 'GET') return this.handlers.handleGet(request, action);
       if (request.method === 'POST') return this.handlers.handlePost(request, action);
       return new Response('Method not allowed', { status: 405, headers: { Allow: 'GET, POST' } });

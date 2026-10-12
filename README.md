@@ -1,62 +1,50 @@
-# MathPath · Learn with Mr. Porras
+# MathHub by Mr. Porras
 
-Guided math practice for grades 6–8, with 24 original introductory topics, worked examples, guided steps, fresh practice questions, hints, and saved progress.
+A separate, expanded MathPath classroom with six courses and 72 original introductory practice topics: 6th Grade Math, 7th Grade Math, Pre-Algebra, Algebra 1, Algebra 2, and Geometry. Each course has 12 topics with explanations, illustrations, worked examples, guided steps, fresh numeric practice, hints, and solutions. This is an introductory practice collection, not a complete course or a formal gradebook.
 
-## Direct Cloudflare deployment
+## Student access and progress
 
-The standalone build is prepared. **Publication to the owner's Cloudflare account has not yet been verified.** The repository URL is not a running classroom.
+Students join with first and last names. Returning with the same normalized spelling restores the same profile and saved progress across devices. Students with identical full names need distinct name variations agreed with Mr. Porras. Sign out on shared devices. These name-based profiles support practice; they do not verify identity.
 
-Deploy the main branch as a Worker named mathpath in account 411e855db2e236ed186881845c318001.
+Mastery requires the Learn and Guided stages plus five independent first-try correct answers. Supported answers still count as correct practice. Activity indicates a recent visible-page heartbeat, not verified attention.
 
-- Build command: npm run build
-- Deploy command: npx wrangler deploy
-- Root directory: repository root
-- Configuration: wrangler.json
-- Student route: /
-- Private teacher route: /teacher
+## Professor access
 
-The checked-in docs/ folder contains the compiled frontend, so npx wrangler deploy can also publish the prepared version directly. SQLite Durable Object storage is provisioned through the configuration; no separate D1 database setup is required.
+Open `/teacher`. Use the private professor access phrase. Capitalization, spaces, and hyphens are ignored. Sessions last eight hours, or 30 days when the personal-device checkbox is selected. Secure HttpOnly cookies, hashed server sessions, expiry, sign-out, rotation, and persistent login limits protect the dashboard. Never commit real credentials or their hashes.
 
-Before classroom use, configure the TEACHER_CODE_SHA256 secret in the Worker settings. Its value is the SHA-256 digest of the private 16-character alphanumeric teacher code, uppercased with spaces and hyphens removed. Keep the actual code and its digest out of this repository. Without the secret, teacher access stays locked.
+The dashboard provides course and activity filters, topic progress, help requests, CSV export, a student-link copy button, and student removal with confirmation. Removing a student deletes that profile and its records, leaving other students intact.
 
-After deployment succeeds, verify the returned workers.dev URL, /api/health, student registration, and /teacher. Replace this pending-publication note with the confirmed links.
+The Sites deployment additionally supports owner-account sign-in. Set `TEACHER_EMAIL` to the verified owner's email as a runtime secret. Standalone Cloudflare ignores caller-supplied Sites identity headers and uses the professor phrase only.
 
-## Students
+## Hosting
 
-Students enter only first and last names. Spaces, Unicode normalization, and letter case are normalized when matching profiles. Returning with the same name restores the same student ID and saved progress, including on another device. Signing out closes the device session while keeping progress.
+The Sites manifest and source repository identify this separate MathHub project. Production secrets are configured through the hosting service, never in source. Existing MathPath records are not copied into this classroom.
 
-Profiles, activity, lesson milestones, question attempts, and progress are stored online. Name-only profiles support optional practice, not verified identities. Two students with the same full name share a profile; agree on distinct name variations when needed. Students should sign out on shared devices.
+For a direct Cloudflare deployment, use the Worker named `mathhub` with `wrangler.cloudflare.json`. The direct Cloudflare publication is pending account authentication.
 
-## Teacher dashboard
+- Build command: `npm run build:cloudflare`
+- Deploy command: `npx wrangler deploy --config wrangler.cloudflare.json`
+- Student route: `/`
+- Professor route: `/teacher`
 
-The private teacher code creates an eight-hour Secure, HttpOnly, SameSite=Strict session. Server-side session hashes support sign-out, expiry, and code rotation. Persistent rate limiting protects code entry. Every teacher action requires authorization. Caller-supplied identity headers never grant access to the standalone Worker.
-
-The dashboard refreshes every 12 seconds and shows student names, grade, current topic and stage, recent activity, help requests, attempts, correct answers, and mastered topics. Includes search, grade/activity filters, individual topic details, CSV export, a student-link copy button, and Remove student with confirmation. Removal deletes the selected profile, sessions, and practice records; other students remain intact.
-
-Activity means a visible-page heartbeat within two minutes, not verified attention. Mastery requires learning and guided stages plus five independent first-try correct answers. Supported correct answers still count in practice totals.
-
-## Different MathPath template
-
-A warm notebook classroom with horizontal navigation, a teal graph-paper banner, grade cards, mathematical illustrations, and a spacious teacher roster. MathPath is a separate project and design from the Python Practice Portal.
+Cloudflare provisions SQLite Durable Object storage from the configuration. Before classroom use, set the secret `TEACHER_CODE_SHA256` to the SHA-256 of the professor phrase uppercased with spaces and hyphens removed. The normalized phrase must contain 12–64 alphanumeric characters, with total input length at most 64. Use a unique random phrase. Without configuration the dashboard fails closed. `/api/health` reports whether the secret is configured, without disclosing it.
 
 ## Verification
 
-Run:
+- `node node_modules/typescript/bin/tsc --noEmit --incremental false`
+- `node scripts/verify-cloudflare.mjs`
+- `node scripts/verify-cloudflare.mjs --sites`
+- `npm run build:cloudflare`
+- `npx wrangler deploy --config wrangler.cloudflare.json --dry-run --outdir work/worker`
+- `node scripts/verify-worker.mjs`
 
-    npm run typecheck:cloudflare
-    npm run verify:cloudflare
-    npm run build
-    npx wrangler deploy --dry-run --outdir work/worker
-    node scripts/verify-worker.mjs
-
-Content checks independently calculate 4,320 generated questions. API checks cover returning students, saved progress, scoring, hints, retries, authorization, session expiry and revocation, cross-origin protection, rate limiting, help requests, and student removal. The actual Worker bundle is tested with Cloudflare's local SQLite Durable Object runtime. Test access codes are public fixtures and must never be used in production.
-
-The direct deployment uses practice/, cloudflare/, and vite.cloudflare.config.ts. The original Sites source remains available in app/, build/, and .openai/. Previously hosted student records are not embedded in public code or frontend assets.
+Math checks independently calculate 12,960 questions across all 72 topics. Both server variants are tested for scoring, progress persistence, returning students, authorization, hints, retries, help, removal, session expiry, rate limits, and secure cookies including 30-day sign-in. The standalone Worker bundle is also checked in the Cloudflare SQLite runtime. Test-only credentials in these scripts are public fixtures and must never be used in production. Browser visual and interaction QA was unavailable in this development environment.
 
 ## Content references
 
-Original lessons; independent of DeltaMath. This introductory collection is not a complete grade-level curriculum or a formal gradebook.
+The original explanations and generators draw on mathematics domains represented in Florida B.E.S.T. and Common Core. They are independent of DeltaMath and do not claim complete standards coverage.
 
+- https://www.fldoe.org/academics/standards/subject-areas/math-science/mathematics/bestmath.stml
 - https://www.thecorestandards.org/Math/Content/6/introduction/
 - https://www.thecorestandards.org/Math/Content/7/introduction/
 - https://www.thecorestandards.org/Math/Content/8/introduction/

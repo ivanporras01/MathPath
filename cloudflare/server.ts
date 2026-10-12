@@ -5,7 +5,7 @@ import { createTeacherAuth } from './teacher-auth';
 export function createHandlers(env: RuntimeEnv) {
 const {authenticateTeacher,loginTeacher,logoutTeacher}=createTeacherAuth(env);
 const DAY=86400000;
-const cookieName='mathpath_student';
+const cookieName='mathhub_student';
 function db(){if(!env.DB)throw new Error('Progress storage is not available. Please try again shortly.');return env.DB;}
 function json(data:unknown,status=200,headers:Record<string,string>={}){return Response.json(data,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers}});}
 function fail(message:string,status=400){return json({error:message},status);}
@@ -20,6 +20,9 @@ async function progressFor(id:string){const results=await db().batch([
 function studentView(s:any){return{id:s.id,firstName:s.first_name,lastName:s.last_name,grade:s.grade,currentTopic:s.current_topic,currentStage:s.current_stage,helpRequested:!!s.help_requested,helpTopic:s.help_topic};}
 function publicQuestion(row:any){const q=generateQuestion(row.topic_id,row.seed,row.level);return{id:row.id,prompt:q.prompt,expression:q.expression,unit:q.unit,note:q.note,level:row.level,attempts:row.attempts,hint:row.hint_used?q.hint:undefined,correct:!!row.correct,revealed:!!row.revealed,steps:row.correct||row.revealed?q.steps:undefined};}
 async function handleGet(req:Request,action:string):Promise<Response>{try{
+
+ if(action==='auth-options')return json({accountLogin:false});
+ if(action==='health')return json({ok:true,name:'MathHub',courses:6,teacherConfigured:!!env.TEACHER_CODE_SHA256});
  if(action==='session'){const s=await identity(req);return json(s?{student:studentView(s),progress:await progressFor(s.id)}:{student:null,progress:{}});}
  if(action==='teacher'){
   if(!await authenticateTeacher(req))return teacherError(req);
@@ -34,7 +37,7 @@ async function handleGet(req:Request,action:string):Promise<Response>{try{
   return json({students:(roster.results as any[]).map(s=>({...studentView(s),lastSeen:s.last_seen,joinedAt:s.joined_at,progress:by[s.id]||{}})),updatedAt:Date.now()});
  }
  return fail('Page not found.',404);
- }catch(e){console.error('MathPath GET failed',e);return fail('Unable to load progress right now. Please try again.',503);}}
+ }catch(e){console.error('MathHub GET failed',e);return fail('Unable to load progress right now. Please try again.',503);}}
 async function handlePost(req:Request,action:string):Promise<Response>{try{
  const origin=req.headers.get('Origin');if(origin!==new URL(req.url).origin||req.headers.get('sec-fetch-site')==='cross-site')return fail('Please use the portal to submit this request.',403);
  if(!req.headers.get('content-type')?.includes('application/json'))return fail('Expected a JSON request.',415);
@@ -48,7 +51,7 @@ async function handlePost(req:Request,action:string):Promise<Response>{try{
   const clean=(v:unknown)=>typeof v==='string'?v.trim().replace(/\s+/g,' ').normalize('NFKC'):'';
   const first=clean(body.firstName),last=clean(body.lastName),valid=(n:string)=>n.length>=1&&n.length<=50&&/^[\p{L}\p{M} .’'\-]+$/u.test(n)&&/\p{L}/u.test(n);
   if(!valid(first)||!valid(last))return fail('Enter your first and last name using letters, spaces, hyphens, or apostrophes.');
-  const now=Date.now(),key=(first+'|'+last).toLocaleLowerCase('en-US'),grade=[6,7,8].includes(body.grade)?body.grade:6;
+  const now=Date.now(),key=(first+'|'+last).toLocaleLowerCase('en-US'),grade=[6,7,8,9,10,11].includes(body.grade)?body.grade:6;
   await db().prepare('INSERT INTO students (id,name_key,first_name,last_name,grade,joined_at,last_seen) VALUES (?,?,?,?,?,?,?) ON CONFLICT(name_key) DO UPDATE SET last_seen=excluded.last_seen').bind(crypto.randomUUID(),key,first,last,grade,now,now).run();
   const student=await db().prepare('SELECT * FROM students WHERE name_key=?').bind(key).first<any>();
   const token=crypto.randomUUID()+crypto.randomUUID();await db().prepare('INSERT INTO sessions(token_hash,student_id,expires_at) VALUES (?,?,?)').bind(await hash(token),student.id,now+30*DAY).run();
@@ -75,7 +78,7 @@ async function handlePost(req:Request,action:string):Promise<Response>{try{
  const s=await identity(req);if(!s)return fail('Please enter your name to continue.',401);
  const now=Date.now();
  if(action==='activity'){
-  const topic=typeof body.topicId==='string'?topicById(body.topicId):undefined,stage=['explore','learn','guided','practice','progress'].includes(body.stage)?body.stage:'explore',grade=[6,7,8].includes(body.grade)?body.grade:s.grade;
+  const topic=typeof body.topicId==='string'?topicById(body.topicId):undefined,stage=['explore','learn','guided','practice','progress'].includes(body.stage)?body.stage:'explore',grade=[6,7,8,9,10,11].includes(body.grade)?body.grade:s.grade;
   await db().prepare('UPDATE students SET current_topic=?,current_stage=?,grade=?,last_seen=? WHERE id=?').bind(topic?.id||null,stage,grade,now,s.id).run();return json({ok:true});
  }
  if(action==='help'){await db().prepare('UPDATE students SET help_requested=?,help_topic=?,last_seen=? WHERE id=?').bind(body.requested===false?0:1,body.requested===false?null:(topicById(body.topicId)?.id||s.current_topic),now,s.id).run();return json({ok:true});}
@@ -108,7 +111,7 @@ async function handlePost(req:Request,action:string):Promise<Response>{try{
   return json({correct,independent:!!updated.independent,attempts:updated.attempts,steps:correct?q.steps:undefined,message:correct?'You got it!':`Not quite yet. ${updated.attempts>1?q.hint:'Check the operation and try again. You can also ask for a hint.'}`,progress:await progressFor(s.id)});
  }
  return fail('Action not found.',404);
- }catch(e){console.error('MathPath POST failed',e);return fail('We could not save that just now. Your answer is still on screen; please try again.',503);}}
+ }catch(e){console.error('MathHub POST failed',e);return fail('We could not save that just now. Your answer is still on screen; please try again.',503);}}
 
 return {handleGet,handlePost};
 }
